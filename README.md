@@ -15,10 +15,10 @@ https://github.com/trymirai/uzu at commit
 Place `target/release/cli` beside the plugin executable as `uzu-server`.
 The patch avoids CLI Keychain settings and external local-provider discovery,
 and selects Uzu's universal downloader for noninteractive execution.
-It also buffers nonstreaming replies with an explicit Content-Length: the tested
-Mesh host otherwise exposes Rocket HTTP chunk framing inside the JSON body.
-This compatibility workaround sacrifices prompt disconnect cancellation for
-nonstreaming requests; streaming retains the upstream cancellation path.
+A small loopback HTTP adapter decodes upstream chunked transfer encoding before
+forwarding connection-delimited JSON/SSE to Mesh. This works around framing bugs
+observed in the tested Mesh 0.78.1 host without changing Uzu generation behavior.
+Requests use Content-Length (up to 16 MiB); chunked uploads are not supported.
 Uzu is MIT-licensed; preserve its LICENSE when distributing that binary.
 
 ## Configure Mesh

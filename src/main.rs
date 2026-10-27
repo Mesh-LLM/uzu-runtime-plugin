@@ -1,3 +1,5 @@
+mod http_transport;
+
 use anyhow::{Context, Result, ensure};
 use clap::Parser;
 use mesh_llm_plugin::{PluginMetadata, PluginRuntime, PluginStartupPolicy, plugin_server_info};
@@ -44,9 +46,11 @@ async fn main() -> Result<()> {
     let listener = std::net::TcpListener::bind("127.0.0.1:0")?;
     let port = listener.local_addr()?.port();
     drop(listener);
+    let frontend = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+    let frontend_port = frontend.local_addr()?.port();
     let initialized = Arc::new(tokio::sync::Notify::new());
     let ready = initialized.clone();
-    let p = plugin(format!("http://127.0.0.1:{port}/v1"))
+    let p = plugin(format!("http://127.0.0.1:{frontend_port}/v1"))
         .on_initialize(|request, _| {
             Box::pin(async move {
                 if request.host_protocol_version != mesh_llm_plugin::PROTOCOL_VERSION {
@@ -102,7 +106,10 @@ wait "$child"
         .stderr(Stdio::inherit())
         .spawn()
         .context("start Uzu supervisor")?;
+    let transport = http_transport::serve(frontend, format!("http://127.0.0.1:{port}"));
+    tokio::pin!(transport);
     let result = tokio::select! {
+        result = &mut transport => result,
         result = &mut connection => result,
         status = child.wait() => Err(anyhow::anyhow!("Uzu exited: {}", status?)),
         _ = shutdown() => Ok(()),
