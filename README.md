@@ -1,48 +1,112 @@
-# Uzu inference plugin for Mesh
+# Uzu runtime plugin for MeshLLM
 
-Experimental Apple Silicon engine plugin. Mesh owns routing; the plugin owns
-an Uzu HTTP server. No inference tensors pass over plugin IPC. Single-node only;
-this does not implement Skippy's split execution or package format.
+Run [Uzu](https://github.com/trymirai/uzu)'s Apple Silicon inference engine through
+[MeshLLM](https://github.com/Mesh-LLM/mesh-llm). Mesh owns model discovery and
+routing; this external plugin owns a local Uzu server and its lifecycle.
 
-Requires Mesh v0.77+ and macOS supported by Uzu (tested on M5 Max).
+**Experimental.** Tested on an M5 Max with MeshLLM 0.78.1. Requires MeshLLM v0.77+
+and Uzu-converted models; GGUF and Skippy split execution are not supported.
+Prebuilt macOS releases and their release pipeline are not available yet.
 
-## Build
+## Performance
 
-`just build` builds the control executable. Build the engine separately from
-https://github.com/trymirai/uzu at commit
-`0d60981a899c79fc1c29ab3ca1c5aeff937affff`, apply `uzu-server.patch`, then run
-`RUSTC_BOOTSTRAP=1 cargo build --release -p cli` with Rust 1.99.0.
-Place `target/release/cli` beside the plugin executable as `uzu-server`.
-The patch avoids CLI Keychain settings and external local-provider discovery,
-and selects Uzu's universal downloader for noninteractive execution.
-A small loopback HTTP adapter decodes upstream chunked transfer encoding before
-forwarding connection-delimited JSON/SSE to Mesh. This works around framing bugs
-observed in the tested Mesh 0.78.1 host without changing Uzu generation behavior.
-Requests use Content-Length (up to 16 MiB); chunked uploads are not supported.
-Uzu is MIT-licensed; preserve its LICENSE when distributing that binary.
+Best-effort Qwen3.8-27B comparison on one M5 Max (128 GB), October 28, 2026:
 
-## Configure Mesh
+| Workload | Released Skippy 0.78.1 | Uzu | Speedup |
+|---|---:|---:|---:|
+| Compiler paragraph | ~21 tok/s | 59–66 tok/s | 2.8–3.1× |
+| Rainbow explanation | 19–23 tok/s | 69–87 tok/s | 3.6–3.8× |
+| Merge-sorted-lists code prefix | ~23 tok/s | 180–221 tok/s | 7.8–9.6× |
+
+Ranges are warm medians across two passes (three measured requests per prompt
+per pass, excluding a warmup). Same prompts, temperature 0, thinking disabled,
+256-token output cap, serial requests, and no prompt-cache reuse. Throughput is
+completion tokens divided by full HTTP request duration, measured against each
+engine directly—not Mesh routing throughput. Warm first-text medians were
+133–191 ms for Uzu and 289–382 ms for Skippy.
+
+These are similar-footprint packages, **not identical quantizations**: Skippy
+UD-Q4_K_M GGUF is 16.46 GB; Uzu mirai-m4 is 14.53 GB plus a 1.03 GB draft
+(15.56 GB total). Uzu's speculative decoding is particularly effective on this
+repetitive code prefix (~10.7 tokens per verification). The code is truncated,
+not a completed coding task. A bounded Skippy N-gram suffix trial did not close
+the gap; this is not an exhaustive tuning study or a latest-source comparison.
+Thermal/desktop activity was uncontrolled, output text varies, and quality,
+tool use, long-context performance, and speculative equivalence were not evaluated.
+See [benchmark method and prompts](docs/PERFORMANCE.md).
+
+## Build from source
+
+The control executable retains the name `uzu-plugin`:
+
+```sh
+just verify
+just build
+```
+
+Build the engine separately from Uzu commit
+`0d60981a899c79fc1c29ab3ca1c5aeff937affff`. In that checkout, apply this repo's
+[`uzu-server.patch`](uzu-server.patch), then build with Rust 1.99.0:
+
+```sh
+git apply /absolute/path/to/uzu-runtime-plugin/uzu-server.patch
+RUSTC_BOOTSTRAP=1 cargo build --locked --release -p cli
+```
+
+Copy Uzu's `target/release/cli` beside `target/release/uzu-plugin`, naming it
+`uzu-server`. Preserve [`UZU_LICENSE`](UZU_LICENSE) when distributing the engine.
+The Mesh plugin SDK is pinned in `Cargo.toml` and `Cargo.lock`.
+
+**Use the patched engine.** Stock Uzu CLI startup accesses application Keychain
+settings and discovers other local providers. The patch removes that path for
+credential-free unattended serving and selects its universal downloader.
+`--engine /absolute/path/uzu-server` overrides the sibling executable.
+
+## Configure MeshLLM
+
+Add to your MeshLLM config (normally `~/.mesh-llm/config.toml`):
 
 ```toml
 [runtime]
 mode = "on_demand"
+
 [[plugin]]
 name = "uzu-plugin"
-command = "/absolute/path/uzu-plugin"
+command = "/absolute/path/to/uzu-plugin"
 args = ["--model", "alibaba:qwen3.8:27b:mirai:mirai-m:4"]
 ```
 
-Run `mesh-llm serve`; query `/v1/models` and use its exact model ID for
-`/v1/chat/completions`. Downloads happen through Uzu and remain in its model
-cache on shutdown. Uzu-converted weights are required; GGUF is not supported.
-There are no Gemma models in the upstream catalog checked for this prototype.
+Start MeshLLM and query its OpenAI-compatible API:
 
-`--engine /absolute/path/uzu-server` overrides the sibling executable.
-Do not point this at the unpatched stock CLI during unattended testing.
+```sh
+mesh-llm serve
+curl http://127.0.0.1:9337/v1/models
+curl http://127.0.0.1:9337/v1/chat/completions \
+  -H 'Content-Type: application/json' \
+  -d '{"model":"alibaba:qwen3.8:27b:mirai:mirai-m:4","messages":[{"role":"user","content":"Explain how a compiler works."}],"max_tokens":256,"enable_thinking":false,"stream":true}'
+```
 
-`just verify` runs formatting, Clippy and the entire package test suite.
-Tests use a fake backend, never download weights or run models; lifecycle tests
-cover disconnect, SIGKILL, incompatible protocol, and unrelated-process safety.
-`just clean` removes disposable Cargo outputs.
+The first launch downloads missing weights through Uzu; allow time for download
+and loading. Its model cache is retained on shutdown. Use the exact model ID
+returned by `/v1/models`. Uzu's catalog checked for this prototype had no Gemma
+conversion; this plugin cannot load the ladder's Gemma GGUFs. The tested Qwen
+conversion advertises no tool support; do not assume agent tool-call compatibility.
 
-Status: local prototype, not published to the plugin catalog or released.
+## Implementation and limitations
+
+- Mesh IPC provides control/initialization and a managed HTTP endpoint. Tensors
+  stay inside Uzu. The engine starts only after a compatible host handshake.
+- A dedicated supervisor shuts down the owned backend on disconnect or plugin
+  termination. Tests include plugin SIGKILL and unrelated-process safety.
+- A loopback adapter decodes HTTP chunk framing before returning
+  connection-delimited JSON/SSE to Mesh, working around framing failures observed
+  with the tested host. It monitors cancellation; a live cancellation/fresh-request
+  smoke passed. This is not exhaustive concurrency qualification.
+- The adapter accepts Content-Length uploads up to 16 MiB, not chunked uploads,
+  and has a 300-second timeout. It is not a general-purpose HTTP proxy.
+- Single-node Apple Silicon only tested. No public/multi-node qualification,
+  release-install test, plugin catalog publication, or automatic updater yet.
+
+`just verify` runs formatting, warning-denying Clippy, and all seven plugin tests.
+Tests use fake backends, never models or Keychain. `just clean` removes Cargo
+outputs. The control plugin is Apache-2.0; Uzu is MIT-licensed.
