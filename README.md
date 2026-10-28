@@ -11,7 +11,29 @@ engine. Requires **macOS 26.4+** (upstream Metal 4 minimum). See [releases](http
 
 ## Binary packages
 
-Download `uzu-runtime-plugin-aarch64-apple-darwin.tar.gz` and its `.sha256`
+Install the latest published release with the stock MeshLLM CLI (no source build):
+
+```sh
+mesh-llm plugins install Mesh-LLM/uzu-runtime-plugin
+mesh-llm plugins info uzu-runtime-plugin
+```
+
+The CLI downloads the matching Apple Silicon release and installs both binaries.
+Installation alone does **not** select a model: this plugin requires `--model`,
+and the released Mesh CLI has no install-time plugin-argument flag. Add the small
+configuration below (no `command` path needed for a CLI-installed plugin), then
+run `mesh-llm serve`:
+
+```toml
+[runtime]
+mode = "on_demand"
+
+[[plugin]]
+name = "uzu-runtime-plugin"
+args = ["--model", "alibaba:qwen3.8:27b:mirai:mirai-m:4"]
+```
+
+Alternatively, download `uzu-runtime-plugin-aarch64-apple-darwin.tar.gz` and its `.sha256`
 from the same release, then verify and extract:
 
 ```sh
