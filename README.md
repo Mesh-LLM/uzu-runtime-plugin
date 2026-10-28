@@ -120,7 +120,7 @@ Add to your MeshLLM config (normally `~/.mesh-llm/config.toml`):
 mode = "on_demand"
 
 [[plugin]]
-name = "uzu-plugin"
+name = "uzu-runtime-plugin"
 command = "/absolute/path/to/uzu-plugin"
 args = ["--model", "alibaba:qwen3.8:27b:mirai:mirai-m:4"]
 ```

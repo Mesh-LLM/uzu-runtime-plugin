@@ -18,8 +18,8 @@ struct Args {
 
 fn plugin(url: String) -> mesh_llm_plugin::SimplePlugin {
     mesh_llm_plugin::plugin! {
-        metadata: PluginMetadata::new("uzu-plugin", env!("CARGO_PKG_VERSION"), plugin_server_info(
-            "uzu-plugin", env!("CARGO_PKG_VERSION"), "Uzu", "Local Uzu Metal inference", None::<String>)),
+        metadata: PluginMetadata::new("uzu-runtime-plugin", env!("CARGO_PKG_VERSION"), plugin_server_info(
+            "uzu-runtime-plugin", env!("CARGO_PKG_VERSION"), "Uzu", "Local Uzu Metal inference", None::<String>)),
         startup_policy: PluginStartupPolicy::Any,
         inference: [mesh_llm_plugin::inference::provider("uzu", url)],
     }

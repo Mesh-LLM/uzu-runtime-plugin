@@ -1,4 +1,4 @@
-name = "uzu-plugin"
-version = "0.1.0"
+name = "uzu-runtime-plugin"
+version = "0.1.1"
 description = "Local Uzu Metal inference for Mesh"
-command = "uzu-plugin"
+command = "uzu-runtime-plugin"
