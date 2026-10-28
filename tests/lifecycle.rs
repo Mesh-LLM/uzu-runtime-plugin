@@ -53,7 +53,7 @@ async fn check_cleanup(hard_kill: bool) {
         &mut stream,
         &proto::Envelope {
             protocol_version: PROTOCOL_VERSION,
-            plugin_id: "uzu-plugin".into(),
+            plugin_id: "uzu-runtime-plugin".into(),
             request_id: 1,
             payload: Some(proto::envelope::Payload::InitializeRequest(
                 proto::InitializeRequest {
@@ -71,6 +71,7 @@ async fn check_cleanup(hard_kill: bool) {
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(reply.plugin_id, "uzu-runtime-plugin");
     assert!(matches!(
         reply.payload,
         Some(proto::envelope::Payload::InitializeResponse(_))
@@ -144,7 +145,7 @@ async fn incompatible_host_never_starts_backend() {
         &mut stream,
         &proto::Envelope {
             protocol_version: PROTOCOL_VERSION,
-            plugin_id: "uzu-plugin".into(),
+            plugin_id: "uzu-runtime-plugin".into(),
             request_id: 1,
             payload: Some(proto::envelope::Payload::InitializeRequest(
                 proto::InitializeRequest {
@@ -162,6 +163,7 @@ async fn incompatible_host_never_starts_backend() {
         .await
         .unwrap()
         .unwrap();
+    assert_eq!(reply.plugin_id, "uzu-runtime-plugin");
     assert!(matches!(
         reply.payload,
         Some(proto::envelope::Payload::ErrorResponse(_))
