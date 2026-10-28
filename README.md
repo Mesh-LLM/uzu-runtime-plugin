@@ -6,7 +6,34 @@ routing; this external plugin owns a local Uzu server and its lifecycle.
 
 **Experimental.** Tested on an M5 Max with MeshLLM 0.78.1. Requires MeshLLM v0.77+
 and Uzu-converted models; GGUF and Skippy split execution are not supported.
-Prebuilt macOS releases and their release pipeline are not available yet.
+The macOS packaging workflow builds Apple Silicon archives with the patched Uzu
+engine. Requires **macOS 26.4+** (upstream Metal 4 minimum). See [releases](https://github.com/Mesh-LLM/uzu-runtime-plugin/releases) for published tags; a workflow run is not itself a release.
+
+## Binary packages
+
+Download `uzu-runtime-plugin-aarch64-apple-darwin.tar.gz` and its `.sha256`
+from the same release, then verify and extract:
+
+```sh
+shasum -a 256 -c uzu-runtime-plugin-aarch64-apple-darwin.tar.gz.sha256
+tar xzf uzu-runtime-plugin-aarch64-apple-darwin.tar.gz
+```
+
+Use the configuration below with name `uzu-runtime-plugin` and command pointing
+to the extracted `uzu-runtime-plugin/uzu-runtime-plugin`. Keep `uzu-server` beside
+it. The archive uses the repository name for Mesh GitHub-installer compatibility;
+the source-built control binary remains `uzu-plugin`. Model arguments are still
+required. No weights are bundled or downloaded during packaging/tests.
+
+Both executables are ad-hoc signed, **not Apple Developer signed or notarized**.
+Gatekeeper may require explicit approval of downloaded binaries; a checksum is
+not an Apple trust assertion. No Apple signing credentials are used.
+
+Maintainers: `bash scripts/package-macos.sh /path/to/clean/pinned/uzu` builds,
+signs, archives, checks hashes and smokes the extracted package. It restores the
+engine patch and cleans both Cargo targets afterwards. The workflow uses the same
+script for PR dry runs and tags. Only matching `vX.Y.Z` tags publish releases;
+manual dispatch just produces workflow artifacts.
 
 ## Performance
 
